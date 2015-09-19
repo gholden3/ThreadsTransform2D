@@ -1,5 +1,5 @@
 // Threaded two-dimensional Discrete FFT transform
-// YOUR NAME HERE
+// Gina Holden
 // ECE8893 Project 2
 
 
@@ -13,6 +13,12 @@
 // You will likely need global variables indicating how
 // many threads there are, and a Complex* that points to the
 // 2d image being transformed.
+Complex* ImageData;
+int ImageWidth;
+int ImageHeight;
+int nThreads = 16;
+pthread_mutex_t exitMutex;
+pthread_cond_t exitCond;
 
 using namespace std;
 
@@ -53,7 +59,7 @@ void Transform1D(Complex* h, int N)
   // "N" is the size of the array (assume even power of 2)
 }
 
-void* Transform2DTHread(void* v)
+void* Transform2DThread(void* v)
 { // This is the thread startign point.  "v" is the thread number
   // Calculate 1d DFT for assigned rows
   // wait for all to complete
@@ -66,8 +72,20 @@ void Transform2D(const char* inputFN)
 { // Do the 2D transform here.
   InputImage image(inputFN);  // Create the helper object for reading the image
   // Create the global pointer to the image array data
+  ImageData = image.GetImageData();
+  Imagewidth = image.GetWidth();
+  ImageHeight = image.GetHeight();
+  pthread_mutex_init(&exitMutex,0);
+  pthread_cond_init(&exitCond,0);
+  pthread_mutex_lock(&exitMutex);
   // Create 16 threads
+  for (int i=0;i<nThreads;++i)
+    {
+    pthread_t pt;
+    pthread_create(&pt,0,Transform2DThread,(void*)i);
+    }
   // Wait for all threads complete
+  pthread_cont_wait(&exitCond,&exitMutex);
   // Write the transformed data
 }
 
