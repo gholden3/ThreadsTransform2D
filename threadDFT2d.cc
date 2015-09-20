@@ -44,7 +44,7 @@ unsigned ReverseBits(unsigned v)
 void calcWeights(){
   for(int i=0;i<N/2;i++)
   {
-  weights[i] = Complex(cos(2*M_PI*n/N),-sin(2*M_PI*n/N));
+  weights[i] = Complex(cos(2*M_PI*i/N),-sin(2*M_PI*i/N));
   }
 }
 
@@ -55,18 +55,26 @@ void swap(Complex* x,Complex* y)
   *y = temp;
 }
 
-void reorder(Complex *data)
+void reorder()
 {//given an array, reorder it with bit reversal
-int reversedIndex = 0;
-  //you're not going to have to reorder first or last element
-  for(int i=1;i<(N-1);i++)
-    {
-    reversedIndex = ReverseBits(i);
-    if(i!=reversedIndex)//if bits are not a palindrome
+  //do it row by row
+  Complex * temp = new Complex[N]; //temp array to hold working values for this row
+  for(int r=0;r<N;r++){//for each row in data
+    int reversedIndex = 0;
+    
+    //you're not going to have to reorder first or last element
+    for(int i=0;i<N;i++)//for each point in the row
       {
-      swap(data+i,data+reversedIndex);//swap their values
+      reversedIndex = ReverseBits(i);
+      if(reversedIndex!=i){
+        temp[i] = ImageData[r*N+reversedIndex];
+        }
       }
-    } 
+   //now copy temp back into data
+   for(int j=0;j<N;j++){
+     ImageData[r*N+j] = temp[j];
+     }
+   }
 }
 
 // GRAD Students implement the following 2 functions.
@@ -82,11 +90,23 @@ void MyBarrier() // Again likely need parameters
 {
 }
                     
-void Transform1D(Complex* h, int N)
+void Transform1D(Complex* h)
 {
   // Implement the efficient Danielson-Lanczos DFT here.
   // "h" is an input/output parameter
   // "N" is the size of the array (assume even power of 2)
+  Complex temp;
+  int points = 2; //loop over number of points: ie  2,4,8,16...64
+  for(points=2;points<=N;points=points*2){
+    for(int i=0;i<N;i=i+points){ //for each group
+      for(int j=0;j<(points/2);j++){//for each point in the group(first half)
+        int offset = points/2;
+        temp = h[i+j];
+        h[i+j] = h[i+j] + weights[j*N/points] * h[i+j+offset];
+        h[i+j+offset] = temp - weights[j*N/points] * h[i+j+offset];
+      }
+    }
+  }
 }
 
 void* Transform2DThread(void* v)
@@ -107,9 +127,14 @@ void Transform2D(const char* inputFN)
   ImageHeight = image.GetHeight();
   //just do the 1D on the whole image without threads first
   //reorder the entire matrix
-  reorder(ImageData);
+  reorder();
   calcWeights();
-
+  int i = 0;
+  Complex * myPtr = 0;
+  for(i=0;i<ImageHeight;i++){
+    myPtr = ImageData+(i*ImageWidth);
+    Transform1D(myPtr);
+  }
 /*
   pthread_mutex_init(&exitMutex,0);
   pthread_cond_init(&exitCond,0);
@@ -123,6 +148,7 @@ void Transform2D(const char* inputFN)
   // Wait for all threads complete
   pthread_cont_wait(&exitCond,&exitMutex);
   // Write the transformed data*/
+  image.SaveImageData("MyAfter1D.txt",ImageData,ImageWidth,ImageHeight);
 }
 
 int main(int argc, char** argv)
