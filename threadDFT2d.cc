@@ -17,6 +17,7 @@ Complex* ImageData;
 int ImageWidth;
 int ImageHeight;
 int nThreads = 16;
+int N = 1024;
 pthread_mutex_t exitMutex;
 pthread_cond_t exitCond;
 
@@ -37,6 +38,27 @@ unsigned ReverseBits(unsigned v)
       v >>= 1;        // Shift reversal value
     }
   return r;
+}
+
+void swap(Complex* x,Complex* y)
+{//swap two values given pointers
+  Complex temp = *x;
+  *x = *y;
+  *y = temp;
+}
+
+void reorder(Complex *data)
+{//given an array, reorder it with bit reversal
+int reversedIndex = 0;
+  //you're not going to have to reorder first or last element
+  for(int i=1;i<(N-1);i++)
+    {
+    reversedIndex = ReverseBits(i);
+    if(i!=reversedIndex)//if bits are not a palindrome
+      {
+      swap(data+i,data+reversedIndex);//swap their values
+      }
+    } 
 }
 
 // GRAD Students implement the following 2 functions.
@@ -73,8 +95,14 @@ void Transform2D(const char* inputFN)
   InputImage image(inputFN);  // Create the helper object for reading the image
   // Create the global pointer to the image array data
   ImageData = image.GetImageData();
-  Imagewidth = image.GetWidth();
+  ImageWidth = image.GetWidth();
   ImageHeight = image.GetHeight();
+  //just do the 1D on the whole image without threads first
+  //reorder the entire matrix
+  reorder(ImageData);
+  
+
+/*
   pthread_mutex_init(&exitMutex,0);
   pthread_cond_init(&exitCond,0);
   pthread_mutex_lock(&exitMutex);
@@ -86,7 +114,7 @@ void Transform2D(const char* inputFN)
     }
   // Wait for all threads complete
   pthread_cont_wait(&exitCond,&exitMutex);
-  // Write the transformed data
+  // Write the transformed data*/
 }
 
 int main(int argc, char** argv)
