@@ -18,6 +18,7 @@ int ImageWidth;
 int ImageHeight;
 int nThreads = 16;
 int N = 1024;
+Complex* weights = new Complex[N/2];
 pthread_mutex_t exitMutex;
 pthread_cond_t exitCond;
 
@@ -38,6 +39,13 @@ unsigned ReverseBits(unsigned v)
       v >>= 1;        // Shift reversal value
     }
   return r;
+}
+
+void calcWeights(){
+  for(int i=0;i<N/2;i++)
+  {
+  weights[i] = Complex(cos(2*M_PI*n/N),-sin(2*M_PI*n/N));
+  }
 }
 
 void swap(Complex* x,Complex* y)
@@ -100,7 +108,7 @@ void Transform2D(const char* inputFN)
   //just do the 1D on the whole image without threads first
   //reorder the entire matrix
   reorder(ImageData);
-  
+  calcWeights();
 
 /*
   pthread_mutex_init(&exitMutex,0);
