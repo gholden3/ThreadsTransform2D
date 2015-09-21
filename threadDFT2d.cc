@@ -69,6 +69,9 @@ void reorder()
       if(reversedIndex!=i){
         temp[i] = ImageData[r*N+reversedIndex];
         }
+      else{
+        temp[i] = ImageData[r*N+i];
+        }
       }
    //now copy temp back into data
    for(int j=0;j<N;j++){
