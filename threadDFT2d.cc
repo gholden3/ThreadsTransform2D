@@ -6,7 +6,8 @@
 #include <iostream>
 #include <string>
 #include <math.h>
-
+#include <pthread.h>
+#include <pthread.h>
 #include "Complex.h"
 #include "InputImage.h"
 
@@ -22,6 +23,7 @@ Complex* weights = new Complex[N/2];
 pthread_mutex_t startCountMutex;
 pthread_mutex_t exitMutex;
 pthread_cond_t exitCond;
+pthread_barrier_t barr;
 int startCount;
 
 using namespace std;
@@ -130,7 +132,8 @@ void* Transform2DThread(void* v)
     Transform1D(rowPtr);
     }
   // wait for all to complete
-  pthread_mutex_lock(&startCountMutex);
+   pthread_barrier_wait(&barr);
+/*  pthread_mutex_lock(&startCountMutex);
   startCount--;
   if (startCount==0)
     { //last to exit. notify main
@@ -143,7 +146,7 @@ void* Transform2DThread(void* v)
     {
     pthread_mutex_unlock(&startCountMutex);
     }
-  // Calculate 1d DFT for assigned columns
+*/  // Calculate 1d DFT for assigned columns
   // Decrement active count and signal main if all complete
   return 0;
 }
@@ -160,19 +163,22 @@ void Transform2D(const char* inputFN)
   reorder();
   calcWeights();
  
-  pthread_mutex_init(&exitMutex,0);
-  pthread_mutex_init(&startCountMutex,0);
-  pthread_cond_init(&exitCond,0);
+//  pthread_mutex_init(&exitMutex,0);
+//  pthread_mutex_init(&startCountMutex,0);
+//  pthread_cond_init(&exitCond,0);
   // holds exit mutex
-  pthread_mutex_lock(&exitMutex);
-  //start threads
-  startCount = nThreads;
+//  pthread_mutex_lock(&exitMutex);
+  //barrier initialization
+  pthread_barrier_init(&barr, NULL, nThreads+1);
+  //start threads and join them to barrier
+//  startCount = nThreads;
+  pthread_t pt;
   for (int i=0;i<nThreads;i++)
     {
-    pthread_t pt;
     pthread_create(&pt,0,Transform2DThread,(void*)i);
     }
-  pthread_cond_wait(&exitCond, &exitMutex);
+//  pthread_cond_wait(&exitCond, &exitMutex);
+  pthread_barrier_wait(&barr);
   image.SaveImageData("MyAfter1D.txt",ImageData,ImageWidth,ImageHeight);
 }
 
