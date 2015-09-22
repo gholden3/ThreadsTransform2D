@@ -24,6 +24,7 @@ pthread_mutex_t startCountMutex;
 pthread_mutex_t exitMutex;
 pthread_cond_t exitCond;
 pthread_barrier_t barr;
+pthread_barrier_t barrT;
 int startCount;
 
 using namespace std;
@@ -84,6 +85,23 @@ void reorder()
    }
 }
 
+void transposeMatrix(){
+  Complex * temp = new Complex[ImageWidth*ImageHeight];
+  //copy ImageData into temp arr
+  for(int i=0;i<ImageHeight;i++){
+    for(int j =0;j<ImageWidth;j++){
+      temp[i*ImageWidth+j] = ImageData[i*ImageWidth+j];
+    }
+  }
+  //loop over temp array to put into ImageData
+  for(int i=0;i<ImageHeight;i++){
+    for(int j=0;j<ImageWidth;j++){
+      ImageData[i*ImageWidth+j] = temp[j*ImageWidth+i];
+    }
+  }
+}
+
+
 // GRAD Students implement the following 2 functions.
 // Undergrads can use the built-in barriers in pthreads.
 
@@ -126,14 +144,23 @@ void* Transform2DThread(void* v)
   int startingRow = myID * rowsPerThread;\
   int endingRow = startingRow + rowsPerThread;
   // Calculate 1d DFT for assigned rows
-  for(startingRow;startingRow<endingRow;startingRow++)
+  for(int sr = startingRow;sr<endingRow;sr++)
     {
-    Complex* rowPtr = ImageData + ImageWidth*startingRow;
+    Complex* rowPtr = ImageData + ImageWidth*sr;
     Transform1D(rowPtr);
     }
   // wait for all to complete
    pthread_barrier_wait(&barr);
-/*  pthread_mutex_lock(&startCountMutex);
+  //wait for transpose of matrix
+  pthread_barrier_wait(&barrT);
+  //now im ready to do 1D dft on cols
+  for(int sr = startingRow;sr<endingRow;sr++)
+    {
+    Complex* rowPtr = ImageData + ImageWidth*sr;
+    Transform1D(rowPtr);
+    }
+  pthread_mutex_lock(&startCountMutex);
+  //decrement active count and signify main if complete
   startCount--;
   if (startCount==0)
     { //last to exit. notify main
@@ -146,8 +173,6 @@ void* Transform2DThread(void* v)
     {
     pthread_mutex_unlock(&startCountMutex);
     }
-*/  // Calculate 1d DFT for assigned columns
-  // Decrement active count and signal main if all complete
   return 0;
 }
 
@@ -158,34 +183,41 @@ void Transform2D(const char* inputFN)
   ImageData = image.GetImageData();
   ImageWidth = image.GetWidth();
   ImageHeight = image.GetHeight();
-  //just do the 1D on the whole image without threads first
   //reorder the entire matrix
   reorder();
   calcWeights();
- 
-//  pthread_mutex_init(&exitMutex,0);
-//  pthread_mutex_init(&startCountMutex,0);
-//  pthread_cond_init(&exitCond,0);
-  // holds exit mutex
-//  pthread_mutex_lock(&exitMutex);
   //barrier initialization
   pthread_barrier_init(&barr, NULL, nThreads+1);
-  //start threads and join them to barrier
-//  startCount = nThreads;
+  pthread_barrier_init(&barrT,NULL,nThreads+1);
   pthread_t pt;
   for (int i=0;i<nThreads;i++)
     {
     pthread_create(&pt,0,Transform2DThread,(void*)i);
     }
-//  pthread_cond_wait(&exitCond, &exitMutex);
   pthread_barrier_wait(&barr);
   image.SaveImageData("MyAfter1D.txt",ImageData,ImageWidth,ImageHeight);
+  transposeMatrix();
+  reorder();
+  calcWeights();
+  //all threads have to wait for me to transpose and reorder the matrix
+  pthread_barrier_wait(&barrT);
+  //restart the threads
+  //wait for all to finish column transforms
+  pthread_cond_wait(&exitCond,&exitMutex);
+  transposeMatrix();
+  image.SaveImageData("Tower-DFT2D.txt",ImageData,ImageWidth,ImageHeight);
 }
 
 int main(int argc, char** argv)
-{
+{ 
   string fn("Tower.txt"); // default file name
   if (argc > 1) fn = string(argv[1]);  // if name specified on cmd line
+  pthread_mutex_init(&exitMutex,0);
+  pthread_mutex_init(&startCountMutex,0);
+  pthread_cond_init(&exitCond,0);
+  //holds exit mutex
+  pthread_mutex_lock(&exitMutex);
+  startCount = nThreads;
   Transform2D(fn.c_str()); //get things start  the transform
 }  
   
