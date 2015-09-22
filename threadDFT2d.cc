@@ -19,8 +19,10 @@ int ImageHeight;
 int nThreads = 16;
 int N = 1024;
 Complex* weights = new Complex[N/2];
+pthread_mutex_t startCountMutex;
 pthread_mutex_t exitMutex;
 pthread_cond_t exitCond;
+int startCount;
 
 using namespace std;
 
@@ -98,24 +100,49 @@ void Transform1D(Complex* h)
   // Implement the efficient Danielson-Lanczos DFT here.
   // "h" is an input/output parameter
   // "N" is the size of the array (assume even power of 2)
+  // no mutexes needed for row transforms. 
+  // no threads will be working on the same rows (hopefully)
   Complex temp;
   int points = 2; //loop over number of points: ie  2,4,8,16...64
   for(points=2;points<=N;points=points*2){
     for(int i=0;i<N;i=i+points){ //for each group
-      for(int j=0;j<(points/2);j++){//for each point in the group(first half)
+      for(int j=0;j<(points/2);j++)
+        {//for each point in the group(first half)
         int offset = points/2;
         temp = h[i+j];
         h[i+j] = h[i+j] + weights[j*N/points] * h[i+j+offset];
         h[i+j+offset] = temp - weights[j*N/points] * h[i+j+offset];
-      }
+        }
     }
   }
 }
 
 void* Transform2DThread(void* v)
 { // This is the thread startign point.  "v" is the thread number
+  unsigned long myID = (unsigned long)v; // my thread number
+  int rowsPerThread = ImageHeight / nThreads;
+  int startingRow = myID * rowsPerThread;\
+  int endingRow = startingRow + rowsPerThread;
   // Calculate 1d DFT for assigned rows
+  for(startingRow;startingRow<endingRow;startingRow++)
+    {
+    Complex* rowPtr = ImageData + ImageWidth*startingRow;
+    Transform1D(rowPtr);
+    }
   // wait for all to complete
+  pthread_mutex_lock(&startCountMutex);
+  startCount--;
+  if (startCount==0)
+    { //last to exit. notify main
+    pthread_mutex_unlock(&startCountMutex);
+    pthread_mutex_lock(&exitMutex);
+    pthread_cond_signal(&exitCond);
+    pthread_mutex_unlock(&exitMutex);
+    }
+  else
+    {
+    pthread_mutex_unlock(&startCountMutex);
+    }
   // Calculate 1d DFT for assigned columns
   // Decrement active count and signal main if all complete
   return 0;
@@ -132,25 +159,20 @@ void Transform2D(const char* inputFN)
   //reorder the entire matrix
   reorder();
   calcWeights();
-  int i = 0;
-  Complex * myPtr = 0;
-  for(i=0;i<ImageHeight;i++){
-    myPtr = ImageData+(i*ImageWidth);
-    Transform1D(myPtr);
-  }
-/*
+ 
   pthread_mutex_init(&exitMutex,0);
+  pthread_mutex_init(&startCountMutex,0);
   pthread_cond_init(&exitCond,0);
+  // holds exit mutex
   pthread_mutex_lock(&exitMutex);
-  // Create 16 threads
-  for (int i=0;i<nThreads;++i)
+  //start threads
+  startCount = nThreads;
+  for (int i=0;i<nThreads;i++)
     {
     pthread_t pt;
     pthread_create(&pt,0,Transform2DThread,(void*)i);
     }
-  // Wait for all threads complete
-  pthread_cont_wait(&exitCond,&exitMutex);
-  // Write the transformed data*/
+  pthread_cond_wait(&exitCond, &exitMutex);
   image.SaveImageData("MyAfter1D.txt",ImageData,ImageWidth,ImageHeight);
 }
 
@@ -158,8 +180,7 @@ int main(int argc, char** argv)
 {
   string fn("Tower.txt"); // default file name
   if (argc > 1) fn = string(argv[1]);  // if name specified on cmd line
-  // MPI initialization here
-  Transform2D(fn.c_str()); // Perform the transform.
+  Transform2D(fn.c_str()); //get things start  the transform
 }  
   
 
